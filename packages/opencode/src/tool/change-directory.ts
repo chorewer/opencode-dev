@@ -18,6 +18,19 @@ export const ChangeDirectoryTool = Tool.define("change_directory", async () => (
     const isDir = await Filesystem.isDir(resolved).catch(() => false)
     if (!isDir) throw new Error(`Not a directory or does not exist: ${resolved}`)
     await Session.setDirectory({ sessionID: ctx.sessionID, directory: resolved })
+
+    const session = await Session.get(ctx.sessionID)
+    const normalizedDir = path.resolve(resolved).replaceAll("\\", "/")
+    const pattern = (normalizedDir.endsWith("/") ? normalizedDir : normalizedDir + "/") + "*"
+    const rules = [...(session.permission ?? [])]
+    const existing = rules.some(
+      (r) => r.permission === "external_directory" && r.pattern === pattern && r.action === "allow",
+    )
+    if (!existing) {
+      rules.push({ permission: "external_directory", pattern, action: "allow" as const })
+      await Session.setPermission({ sessionID: ctx.sessionID, permission: rules })
+    }
+
     return {
       title: "change_directory",
       metadata: {},
