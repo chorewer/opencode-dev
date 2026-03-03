@@ -1,7 +1,7 @@
 import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2"
 import { createSimpleContext } from "./helper"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
-import { batch, onCleanup, onMount } from "solid-js"
+import { batch, createSignal, onCleanup, onMount } from "solid-js"
 
 export type EventSource = {
   on: (handler: (event: Event) => void) => () => void
@@ -17,6 +17,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     events?: EventSource
   }) => {
     const abort = new AbortController()
+    const [connected, setConnected] = createSignal(false)
     const sdk = createOpencodeClient({
       baseUrl: props.url,
       signal: abort.signal,
@@ -64,6 +65,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     onMount(async () => {
       // If an event source is provided, use it instead of SSE
       if (props.events) {
+        setConnected(true)
         const unsub = props.events.on(handleEvent)
         onCleanup(unsub)
         return
@@ -77,16 +79,37 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
           {
             signal: abort.signal,
           },
-        )
+        ).catch(() => undefined)
 
-        for await (const event of events.stream) {
-          handleEvent(event)
+        if (!events) {
+          setConnected(false)
+          await Bun.sleep(250)
+          continue
         }
+
+        setConnected(true)
+        try {
+          for await (const event of events.stream) {
+            try {
+              handleEvent(event)
+            } catch {
+              // individual event handler errors must not break the stream loop
+            }
+          }
+        } catch {
+          // stream iteration error; reconnect after brief delay
+        }
+
+        setConnected(false)
 
         // Flush any remaining events
         if (timer) clearTimeout(timer)
         if (queue.length > 0) {
           flush()
+        }
+
+        if (!abort.signal.aborted) {
+          await Bun.sleep(250)
         }
       }
     })
@@ -96,6 +119,6 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       if (timer) clearTimeout(timer)
     })
 
-    return { client: sdk, event: emitter, url: props.url }
+    return { client: sdk, event: emitter, url: props.url, connected }
   },
 })

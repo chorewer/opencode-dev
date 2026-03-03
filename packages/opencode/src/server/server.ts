@@ -547,7 +547,7 @@ export namespace Server {
                 }
               })
 
-              // Send heartbeat every 10s to prevent stalled proxy streams.
+              // Send heartbeat every 5s to prevent stalled proxy/NAT streams.
               const heartbeat = setInterval(() => {
                 stream.writeSSE({
                   data: JSON.stringify({
@@ -555,7 +555,7 @@ export namespace Server {
                     properties: {},
                   }),
                 })
-              }, 10_000)
+              }, 5_000)
 
               await new Promise<void>((resolve) => {
                 stream.onAbort(() => {

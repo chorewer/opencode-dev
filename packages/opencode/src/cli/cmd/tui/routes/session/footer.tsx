@@ -3,6 +3,7 @@ import { useTheme } from "../../context/theme"
 import { useSync } from "../../context/sync"
 import { useDirectory } from "../../context/directory"
 import { useConnected } from "../../component/dialog-model"
+import { useSDK } from "../../context/sdk"
 import { createStore } from "solid-js/store"
 import { useRoute } from "../../context/route"
 
@@ -19,6 +20,8 @@ export function Footer() {
   })
   const directory = useDirectory()
   const connected = useConnected()
+  const sdk = useSDK()
+  const sseConnected = () => sdk.connected()
 
   const [store, setStore] = createStore({
     welcome: false,
@@ -53,6 +56,9 @@ export function Footer() {
     <box flexDirection="row" justifyContent="space-between" gap={1} flexShrink={0}>
       <text fg={theme.textMuted}>{directory()}</text>
       <box gap={2} flexDirection="row" flexShrink={0}>
+        <Show when={!sseConnected()}>
+          <text fg={theme.error}>disconnected</text>
+        </Show>
         <Switch>
           <Match when={store.welcome}>
             <text fg={theme.text}>
