@@ -28,6 +28,7 @@ import { LspTool } from "./lsp"
 import { Truncate } from "./truncation"
 
 import { ApplyPatchTool } from "./apply_patch"
+import { ChangeDirectoryTool } from "./change-directory"
 import { Glob } from "../util/glob"
 import { pathToFileURL } from "url"
 
@@ -104,6 +105,7 @@ export namespace ToolRegistry {
       InvalidTool,
       ...(question ? [QuestionTool] : []),
       BashTool,
+      ChangeDirectoryTool,
       ReadTool,
       GlobTool,
       GrepTool,

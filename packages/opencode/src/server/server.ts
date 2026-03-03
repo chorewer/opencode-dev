@@ -32,6 +32,7 @@ import { ExperimentalRoutes } from "./routes/experimental"
 import { ProviderRoutes } from "./routes/provider"
 import { lazy } from "../util/lazy"
 import { InstanceBootstrap } from "../project/bootstrap"
+import { Session } from "../session"
 import { NotFoundError } from "../storage/db"
 import type { ContentfulStatusCode } from "hono/utils/http-status"
 import { websocket } from "hono/bun"
@@ -196,14 +197,25 @@ export namespace Server {
         .use(async (c, next) => {
           if (c.req.path === "/log") return next()
           const workspaceID = c.req.query("workspace") || c.req.header("x-opencode-workspace")
-          const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
-          const directory = (() => {
+          const explicitRaw = c.req.query("directory") || c.req.header("x-opencode-directory")
+          let directory: string
+          if (explicitRaw) {
             try {
-              return decodeURIComponent(raw)
+              directory = decodeURIComponent(explicitRaw)
             } catch {
-              return raw
+              directory = explicitRaw
             }
-          })()
+          } else {
+            const segments = c.req.path.split("/")
+            const sessionID = segments[1] === "session" && segments[2] ? segments[2] : null
+            const sessionDir =
+              sessionID != null
+                ? await Session.get(sessionID)
+                    .then((s) => s.directory)
+                    .catch(() => null)
+                : null
+            directory = sessionDir ?? process.cwd()
+          }
 
           return WorkspaceContext.provide({
             workspaceID,

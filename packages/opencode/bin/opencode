@@ -25,7 +25,6 @@ if (envPath) {
 const scriptPath = fs.realpathSync(__filename)
 const scriptDir = path.dirname(scriptPath)
 
-//
 const cached = path.join(scriptDir, ".opencode")
 if (fs.existsSync(cached)) {
   run(cached)
@@ -147,6 +146,17 @@ const names = (() => {
   }
   return [base]
 })()
+
+const distDir = path.join(scriptDir, "..", "dist")
+if (fs.existsSync(distDir)) {
+  for (const name of names) {
+    const candidate = path.join(distDir, name, "bin", binary)
+    if (fs.existsSync(candidate)) {
+      run(candidate)
+      break
+    }
+  }
+}
 
 function findBinary(startDir) {
   let current = startDir

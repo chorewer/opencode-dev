@@ -757,6 +757,7 @@ export namespace Provider {
   const state = Instance.state(async () => {
     using _ = log.time("state")
     const config = await Config.get()
+    const globalConfig = await Config.getGlobal()
     const modelsDev = await ModelsDev.get()
     const database = mapValues(modelsDev, fromModelsDevProvider)
 
@@ -778,7 +779,10 @@ export namespace Provider {
 
     log.info("init")
 
-    const configProviders = Object.entries(config.provider ?? {})
+    const configProviders = Object.entries({
+      ...(globalConfig.provider ?? {}),
+      ...(config.provider ?? {}),
+    })
 
     // Add GitHub Copilot Enterprise provider that inherits from GitHub Copilot
     if (database["github-copilot"]) {
@@ -807,7 +811,7 @@ export namespace Provider {
       providers[providerID] = mergeDeep(match, provider)
     }
 
-    // extend database from config
+    // extend database from config (global + project)
     for (const [providerID, provider] of configProviders) {
       const existing = database[providerID]
       const parsed: Info = {
@@ -976,7 +980,7 @@ export namespace Provider {
       }
     }
 
-    // load config
+    // load config (global + project)
     for (const [providerID, provider] of configProviders) {
       const partial: Partial<Info> = { source: "config" }
       if (provider.env) partial.env = provider.env
@@ -1286,8 +1290,9 @@ export namespace Provider {
   }
 
   export async function defaultModel() {
-    const cfg = await Config.get()
+    const [cfg, globalCfg] = await Promise.all([Config.get(), Config.getGlobal()])
     if (cfg.model) return parseModel(cfg.model)
+    if (globalCfg.model) return parseModel(globalCfg.model)
 
     const providers = await list()
     const recent = (await Filesystem.readJson<{ recent?: { providerID: string; modelID: string }[] }>(
@@ -1302,7 +1307,8 @@ export namespace Provider {
       return { providerID: entry.providerID, modelID: entry.modelID }
     }
 
-    const provider = Object.values(providers).find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.id))
+    const allowedProviders = cfg.provider ?? globalCfg.provider
+    const provider = Object.values(providers).find((p) => !allowedProviders || Object.keys(allowedProviders).includes(p.id))
     if (!provider) throw new Error("no providers found")
     const [model] = sort(Object.values(provider.models))
     if (!model) throw new Error("no models found")

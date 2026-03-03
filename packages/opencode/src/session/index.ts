@@ -392,6 +392,27 @@ export namespace Session {
     },
   )
 
+  export const setDirectory = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+      directory: z.string(),
+    }),
+    async (input) => {
+      return Database.use((db) => {
+        const row = db
+          .update(SessionTable)
+          .set({ directory: input.directory })
+          .where(eq(SessionTable.id, input.sessionID))
+          .returning()
+          .get()
+        if (!row) throw new NotFoundError({ message: `Session not found: ${input.sessionID}` })
+        const info = fromRow(row)
+        Database.effect(() => Bus.publish(Event.Updated, { info }))
+        return info
+      })
+    },
+  )
+
   export const setArchived = fn(
     z.object({
       sessionID: Identifier.schema("session"),
