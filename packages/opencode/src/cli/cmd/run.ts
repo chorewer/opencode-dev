@@ -434,12 +434,39 @@ export const RunCommand = cmd({
       }
 
       const events = await sdk.event.subscribe()
+      const stream = events.stream[Symbol.asyncIterator]()
       let error: string | undefined
+
+      // Wait for server.connected before sending the prompt to avoid a race
+      // condition where events are emitted before the SSE connection is ready.
+      // The HTTP connection is only established on the first iterator pull, so
+      // we prime the iterator here and hold the first event until loop() picks
+      // it up.
+      let primed: IteratorResult<typeof events.stream extends AsyncIterable<infer T> ? T : never> | undefined
+      await (async () => {
+        while (true) {
+          const result = await stream.next()
+          if (result.done) return
+          if (result.value.type === "server.connected") {
+            primed = result
+            return
+          }
+        }
+      })()
 
       async function loop() {
         const toggles = new Map<string, boolean>()
 
-        for await (const event of events.stream) {
+        async function* merged() {
+          if (primed) yield primed.value
+          while (true) {
+            const result = await stream.next()
+            if (result.done) return
+            yield result.value
+          }
+        }
+
+        for await (const event of merged()) {
           if (
             event.type === "message.updated" &&
             event.properties.info.role === "assistant" &&
