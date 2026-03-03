@@ -1,10 +1,9 @@
-import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Log } from "../util/log"
 import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler } from "hono-openapi"
 import { Hono } from "hono"
 import { cors } from "hono/cors"
-import { streamSSE } from "hono/streaming"
+import { upgradeWebSocket } from "hono/bun"
 import { proxy } from "hono/proxy"
 import { basicAuth } from "hono/basic-auth"
 import z from "zod"
@@ -512,61 +511,46 @@ export namespace Server {
         )
         .get(
           "/event",
-          describeRoute({
-            summary: "Subscribe to events",
-            description: "Get events",
-            operationId: "event.subscribe",
-            responses: {
-              200: {
-                description: "Event stream",
-                content: {
-                  "text/event-stream": {
-                    schema: resolver(BusEvent.payloads()),
-                  },
-                },
-              },
-            },
-          }),
-          async (c) => {
-            log.info("event connected")
-            c.header("X-Accel-Buffering", "no")
-            c.header("X-Content-Type-Options", "nosniff")
-            return streamSSE(c, async (stream) => {
-              stream.writeSSE({
-                data: JSON.stringify({
-                  type: "server.connected",
-                  properties: {},
-                }),
-              })
-              const unsub = Bus.subscribeAll(async (event) => {
-                await stream.writeSSE({
-                  data: JSON.stringify(event),
-                })
-                if (event.type === Bus.InstanceDisposed.type) {
-                  stream.close()
-                }
-              })
+          upgradeWebSocket((c) => {
+            // Bus.subscribeAll must be called here (inside the middleware AsyncLocalStorage context),
+            // not inside onOpen which runs in a different async context.
+            let socket: { send: (data: string) => void; close: () => void } | null = null
+            const buffer: string[] = []
 
-              // Send heartbeat every 5s to prevent stalled proxy/NAT streams.
-              const heartbeat = setInterval(() => {
-                stream.writeSSE({
-                  data: JSON.stringify({
-                    type: "server.heartbeat",
-                    properties: {},
-                  }),
-                })
-              }, 5_000)
-
-              await new Promise<void>((resolve) => {
-                stream.onAbort(() => {
-                  clearInterval(heartbeat)
-                  unsub()
-                  resolve()
-                  log.info("event disconnected")
-                })
-              })
+            const unsub = Bus.subscribeAll((event) => {
+              const data = JSON.stringify(event)
+              if (socket) {
+                try {
+                  socket.send(data)
+                } catch {}
+              } else {
+                buffer.push(data)
+              }
             })
-          },
+
+            return {
+              onOpen(_event, ws) {
+                log.info("event connected")
+                socket = ws.raw as typeof socket
+                ws.send(JSON.stringify({ type: "server.connected", properties: {} }))
+                for (const data of buffer) {
+                  try {
+                    ws.send(data)
+                  } catch {}
+                }
+                buffer.length = 0
+              },
+              onClose() {
+                unsub()
+                socket = null
+                log.info("event disconnected")
+              },
+              onError() {
+                unsub()
+                socket = null
+              },
+            }
+          }),
         )
         .all("/*", async (c) => {
           const path = c.req.path
