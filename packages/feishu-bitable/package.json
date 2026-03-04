@@ -1,0 +1,22 @@
+{
+  "name": "@opencode-ai/feishu-bitable",
+  "version": "0.1.0",
+  "description": "CLI tool for Feishu Bitable (multidimensional tables) — designed for AI agents",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "feishu-bitable": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "typecheck": "tsgo --noEmit"
+  },
+  "dependencies": {
+    "@larksuiteoapi/node-sdk": "^1.5.20"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "@typescript/native-preview": "catalog:"
+  }
+}
