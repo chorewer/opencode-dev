@@ -305,14 +305,24 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
         case "message.part.delta": {
           const parts = store.part[event.properties.messageID]
-          if (!parts) break
-          const result = Binary.search(parts, event.properties.partID, (p) => p.id)
-          if (!result.found) break
+          if (!parts) {
+            // message.updated was missed - re-sync to recover
+            fullSyncedSessions.delete(event.properties.sessionID)
+            result.session.sync(event.properties.sessionID).catch(() => {})
+            break
+          }
+          const found = Binary.search(parts, event.properties.partID, (p) => p.id)
+          if (!found.found) {
+            // message.part.updated was missed - re-sync to recover
+            fullSyncedSessions.delete(event.properties.sessionID)
+            result.session.sync(event.properties.sessionID).catch(() => {})
+            break
+          }
           setStore(
             "part",
             event.properties.messageID,
             produce((draft) => {
-              const part = draft[result.index]
+              const part = draft[found.index]
               const field = event.properties.field as keyof typeof part
               const existing = part[field] as string | undefined
               ;(part[field] as string) = (existing ?? "") + event.properties.delta

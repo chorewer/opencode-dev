@@ -29,6 +29,8 @@ import { Truncate } from "./truncation"
 
 import { ApplyPatchTool } from "./apply_patch"
 import { ChangeDirectoryTool } from "./change-directory"
+import { SerperSearchTool } from "./serper-search"
+import { SerperBrowseTool } from "./serper-browse"
 import { Glob } from "../util/glob"
 import { pathToFileURL } from "url"
 
@@ -117,6 +119,7 @@ export namespace ToolRegistry {
       // TodoReadTool,
       WebSearchTool,
       CodeSearchTool,
+      ...(process.env.SERPER_API_KEY ? [SerperSearchTool, SerperBrowseTool] : []),
       SkillTool,
       ApplyPatchTool,
       ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),

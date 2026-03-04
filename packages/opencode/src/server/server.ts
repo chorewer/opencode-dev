@@ -528,6 +528,8 @@ export namespace Server {
               }
             })
 
+            let pingInterval: Timer | undefined
+
             return {
               onOpen(_event, ws) {
                 log.info("event connected")
@@ -539,13 +541,21 @@ export namespace Server {
                   } catch {}
                 }
                 buffer.length = 0
+                // Send ping every 20s to keep connection alive through NAT/proxies
+                pingInterval = setInterval(() => {
+                  try {
+                    ;(socket as any)?.ping?.()
+                  } catch {}
+                }, 20000)
               },
               onClose() {
+                clearInterval(pingInterval)
                 unsub()
                 socket = null
                 log.info("event disconnected")
               },
               onError() {
+                clearInterval(pingInterval)
                 unsub()
                 socket = null
               },
